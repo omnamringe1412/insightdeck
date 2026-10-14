@@ -52,6 +52,7 @@ tr:hover td{background:#1a2440}
 .chart-box{position:relative;height:280px}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
 .err{color:var(--warn);margin-top:10px;font-size:14px}
+.sel{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:14px}
 .sub{font-size:12px;margin:18px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
 .bul{margin:6px 0 0;padding-left:18px;font-size:14px;line-height:1.7}
 .contact{border-top:1px solid var(--line);margin-top:24px;padding:24px;color:var(--muted);font-size:13px;text-align:left}
@@ -65,7 +66,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
       <h1>InsightDeck</h1>
       <p>Upload a dataset. Get KPIs, hidden patterns, risks and decision-ready insights.</p>
     </div>
-    <div class="muted" style="color:#dfe6ff">Runs fully in your browser · No data leaves your device</div>
+    <div class="muted" style="color:#dfe6ff">CSV, Excel and JSON are read in your browser. Power BI files are sent to our parser, read, then deleted.</div>
   </div>
 </header>
 
@@ -74,7 +75,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
   <section id="upload" class="card">
     <div class="drop" id="drop">
       <strong>Drop your dataset here or click to browse</strong>
-      <div class="muted">Supported: CSV, XLSX, XLS, JSON, plus Power BI and Tableau exports · first sheet is analysed</div>
+      <div class="muted">Supported: CSV, XLSX, XLS, JSON, plus Power BI and Tableau exports · first sheet is analysed. CSV and Excel never leave your browser; Power BI files are read on the parser server and deleted after reading.</div>
       <div class="row">
         <button class="btn" id="browse" type="button">Choose file</button>
         <button class="btn ghost" id="sample" type="button">Try sample sales data</button>
@@ -92,7 +93,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
         <div class="muted" id="subtitle"></div>
       </div>
       <div class="row" style="margin:0">
-        <button class="btn ghost" id="copy" type="button">Copy summary</button>
+        <select id="metricSel" class="sel" title="Main metric"></select><select id="dimSel" class="sel" title="Segment"></select><button class="btn ghost" id="copy" type="button">Copy summary</button>
         <button class="btn" id="report" type="button">Download report (.txt)</button>
         <button class="btn ghost" id="reset" type="button">New dataset</button>
       </div>
@@ -106,7 +107,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
         <ul class="ins" id="insights"></ul>
       </div>
       <div class="card">
-        <h2>Recommended actions for decision makers</h2>
+        <h2>Suggested checks (based only on this dataset)</h2>
         <ul class="ins" id="recs"></ul>
       </div>
     </div>
@@ -120,7 +121,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
       <div class="card">
         <h2>Strongest relationships between metrics</h2>
         <div class="tbl-wrap"><table><thead><tr><th>Metric A</th><th>Metric B</th><th>Correlation (r)</th><th>Strength</th></tr></thead><tbody id="corr"></tbody></table></div>
-        <div class="muted" style="margin-top:8px">Correlation shows association, not causation. Validate before acting.</div>
+        <div class="muted" style="margin-top:8px">Correlation measures linear association only. It does not show cause, and a third factor can drive both metrics.</div>
       </div>
       <div class="card">
         <h2>Column profile & data quality</h2>
@@ -153,16 +154,28 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
   const fmt = (n, d = 2) => (n == null || !isFinite(n)) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
   const isNum = v => typeof v === 'number' ? isFinite(v) : (typeof v === 'string' && v.trim() !== '' && isFinite(Number(v)));
   const toNum = v => typeof v === 'number' ? v : Number(v);
-  const isDate = v => v instanceof Date || (typeof v === 'string' && /^\d{4}[-\/]\d{1,2}([-\/]\d{1,2})?/.test(v.trim()) && !isNaN(Date.parse(v)));
+  const mkDate = (y, mo, d) => { if (mo < 1 || mo > 12 || d < 1 || d > 31) return null; const dt = new Date(y, mo - 1, d); return dt.getMonth() === mo - 1 ? dt : null; };
+  const MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  function parseDate(v) {
+    if (v instanceof Date) return isNaN(v) ? null : v;
+    if (typeof v !== 'string') return null;
+    const s = v.trim(); let m;
+    if ((m = s.match(/^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?(?:[T\s].*)?$/))) return mkDate(+m[1], +m[2], +(m[3] || 1));
+    if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/))) { const a = +m[1], b = +m[2]; return a > 12 ? mkDate(+m[3], b, a) : mkDate(+m[3], a, b); }
+    if ((m = s.match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/)) && MON.includes(m[1].toLowerCase())) return mkDate(+m[3], MON.indexOf(m[1].toLowerCase()) + 1, +m[2]);
+    if ((m = s.match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?,?\s+(\d{4})$/)) && MON.includes(m[2].toLowerCase())) return mkDate(+m[3], MON.indexOf(m[2].toLowerCase()) + 1, +m[1]);
+    return null;
+  }
+  const isDate = v => parseDate(v) !== null;
+  const monthKey = v => { const d = parseDate(v); return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : null; };
   const quant = (xs, q) => { const p = (xs.length - 1) * q, lo = Math.floor(p), hi = Math.ceil(p); return xs[lo] + (xs[hi] - xs[lo]) * (p - lo); };
-  const monthKey = v => v instanceof Date
-    ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
-    : String(v).replace(/\//g, '-').slice(0, 7);
+  
   const isIdName = n => /(^|[_\s])id$|^id$/i.test(n);
   const isMetricName = n => /revenue|sales|amount|total|price|profit|value|units|cost|qty|quantity|income/i.test(n);
   const isDimName = n => /region|product|category|segment|type|channel|city|country|status|group|department|brand/i.test(n);
 
   let charts = [];
+  let lastArgs = null;
   let current = null;
 
   function profile(rows, cols) {
@@ -177,14 +190,15 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
       if (vals.length && numCount / vals.length > 0.9) type = 'numeric';
       else if (vals.length && dateCount / vals.length > 0.9) type = 'date';
       else if (unique <= Math.max(20, n * 0.3)) type = 'category';
-      const p = { name: c, type, missing, missingPct: n ? missing / n * 100 : 0, unique };
+      const p = { name: c, type, missing, missingPct: n ? missing / n * 100 : 0, unique, dateRate: vals.length ? dateCount / vals.length * 100 : 0 };
       if (type === 'numeric') {
         const xs = vals.filter(isNum).map(toNum).sort((a, b) => a - b);
         const sum = xs.reduce((a, b) => a + b, 0), mean = sum / xs.length;
         const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / xs.length);
         const q1 = quant(xs, .25), q3 = quant(xs, .75), iqr = q3 - q1;
-        p.stats = { sum, mean, sd, median: quant(xs, .5), min: xs[0], max: xs[xs.length - 1],
-          outliers: xs.filter(x => x < q1 - 1.5 * iqr || x > q3 + 1.5 * iqr).length };
+        const lo = q1 - 1.5 * iqr, hi = q3 + 1.5 * iqr;
+        p.stats = { sum, mean, sd, median: quant(xs, .5), min: xs[0], max: xs[xs.length - 1], lo, hi,
+          outliers: iqr > 0 ? xs.filter(x => x < lo || x > hi).length : 0 };
         p.stats.cv = mean ? sd / Math.abs(mean) : 0;
       }
       if (type === 'category' && vals.length) {
@@ -206,30 +220,37 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
     return dx && dy ? num / Math.sqrt(dx * dy) : null;
   }
 
-  function analyze(rawRows, name) {
+  function analyze(rawRows, name, ov = {}) {
     current = null;
-    const rows = rawRows.filter(r => r && typeof r === 'object' && Object.values(r).some(v => v !== null && v !== undefined && v !== ''));
+    lastArgs = { rawRows, name };
+    const rows = rawRows.filter(r => r && typeof r === 'object' && Object.values(r).some(v => v !== null && v !== undefined && v !== '')).map(r => ({ ...r }));
+    Object.keys(rows[0] || {}).filter(c => /date|time|month|period|day/i.test(c)).forEach(c => rows.forEach(r => { const v = r[c]; if (typeof v === 'number' && v > 20000 && v < 80000) r[c] = new Date(Math.round((v - 25569) * 86400000)); }));
     if (!rows.length) { showErr('No usable rows were found in this file.'); return; }
     const cols = Object.keys(rows[0]).filter(c => c && c.trim() !== '');
     const prof = profile(rows, cols);
     const n = rows.length;
     const numCols = prof.filter(p => p.type === 'numeric' && !isIdName(p.name) && p.unique < n * .98);
     const dimCols = prof.filter(p => p.type === 'category' && p.unique > 1 && p.unique < n * .5);
-    const dateCol = prof.find(p => p.type === 'date');
+    const dateCol = prof.find(p => p.type === 'date') || prof.filter(p => p.dateRate >= 50).sort((a, b) => b.dateRate - a.dateRate)[0] || null;
     const seen = new Set(); let dups = 0;
     rows.forEach(r => { const k = JSON.stringify(r); seen.has(k) ? dups++ : seen.add(k); });
     const avgMissing = prof.reduce((a, p) => a + p.missingPct, 0) / prof.length;
     const completeness = 100 - avgMissing;
 
-    const metric = numCols.find(p => isMetricName(p.name)) || numCols[0];
-    const dim = dimCols.find(p => isDimName(p.name)) || dimCols[0];
+    const pickM = rx => numCols.find(p => rx.test(p.name));
+    const metric = (ov.metric && numCols.find(p => p.name === ov.metric)) || [/revenue|sales|amount/i, /profit|income|total/i, /units|qty|quantity|orders/i, /value|cost/i].map(pickM).find(Boolean) || numCols.find(p => !/rate|pct|percent|ratio|discount|share|price/i.test(p.name)) || numCols[0];
+    const dim = ov.dim === '' ? null : ((ov.dim && dimCols.find(p => p.name === ov.dim)) || dimCols.find(p => isDimName(p.name)) || dimCols[0] || null);
     const insights = [], recs = [];
 
-    insights.push({ lvl: 'info', t: 'Dataset scope', s: `${fmt(n, 0)} records across ${cols.length} columns (${numCols.length} numeric, ${dimCols.length} categorical${dateCol ? ', 1 date' : ''}).` });
+    insights.push({ lvl: 'info', t: 'Dataset scope', s: `${fmt(n, 0)} records and ${cols.length} columns: ${prof.filter(p => p.type === 'numeric').length} numeric, ${prof.filter(p => p.type === 'category').length} categorical, ${prof.filter(p => p.type === 'date').length} date, ${prof.filter(p => p.type === 'text').length} text. The analysis uses ${numCols.length} numeric metrics and ${dimCols.length} segment columns; identifier-like and near-unique columns are excluded.` });
     if (completeness < 95) {
       insights.push({ lvl: 'warn', t: 'Data completeness risk', s: `${fmt(avgMissing)}% of values are missing on average. Results on sparse columns may be unreliable.` });
       recs.push('Fix missing-value gaps at the source before reporting, or document how they were handled.');
     } else insights.push({ lvl: 'good', t: 'Good data completeness', s: `${fmt(completeness)}% of values are populated.` });
+    if (metric) {
+      const missingMetric = rows.filter(r => !isNum(r[metric.name])).length;
+      if (missingMetric) insights.push({ lvl: 'warn', t: 'Missing metric values', s: `${fmt(missingMetric, 0)} records have no usable ${metric.name} value. They are excluded from averages and add nothing to totals.` });
+    }
     if (dups) {
       insights.push({ lvl: 'warn', t: 'Duplicate records', s: `${fmt(dups, 0)} exact duplicate rows detected, which can inflate totals.` });
       recs.push('Deduplicate records to avoid overstated totals and counts.');
@@ -243,7 +264,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
         recs.push(`Report the median alongside the average for ${metric.name} to give leaders a realistic typical value.`);
       }
       if (s.outliers) {
-        insights.push({ lvl: 'warn', t: 'Outliers detected', s: `${fmt(s.outliers, 0)} unusual values in ${metric.name} (outside 1.5×IQR). Investigate whether these are errors or high-value events.` });
+        insights.push({ lvl: 'warn', t: 'Outliers detected', s: `${fmt(s.outliers, 0)} values in ${metric.name} lie outside the fences ${fmt(s.lo)} to ${fmt(s.hi)} (1.5×IQR rule). Check them against source records; they may be errors or genuine large events.` });
         recs.push(`Review the ${fmt(s.outliers, 0)} outlier records in ${metric.name} before forecasting.`);
       }
       if (s.cv > 1) insights.push({ lvl: 'warn', t: 'High volatility', s: `${metric.name} varies widely relative to its average, indicating an unstable process.` });
@@ -259,9 +280,9 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
       if (sorted.length > 1) insights.push({ lvl: 'info', t: `Lowest ${dim.name}: ${lowK}`, s: `${lowK} contributes ${fmt(lowV / tot * 100)}% of ${metric.name}. The gap to the top segment is ${fmt(topV && (topV - lowV) / topV * 100)}%.` });
       if (topV / tot > .5) {
         insights.push({ lvl: 'warn', t: 'Concentration risk', s: `One ${dim.name} drives over half of ${metric.name}. Losing it would significantly hurt results.` });
-        recs.push(`Diversify ${metric.name} across ${dim.name} segments or build contingency plans for ${topK}.`);
+        recs.push(`Check how much of ${metric.name} depends on ${topK}; if that share is a risk, plan for it.`);
       }
-      recs.push(`Prioritise investment in ${topK} and examine what drives its success for replication in ${lowK}.`);
+      recs.push(`Before reallocating budget, confirm that ${topK}'s lead holds across periods; this data shows where ${metric.name} comes from, not why.`);
     }
 
     if (dateCol && metric) {
@@ -275,7 +296,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
         const ch = h1 ? (h2 - h1) / Math.abs(h1) * 100 : 0;
         const lvl = ch >= 0 ? 'good' : 'warn';
         insights.push({ lvl, t: 'Trend direction', s: `${metric.name} ${ch >= 0 ? 'rose' : 'fell'} ${fmt(Math.abs(ch))}% in the later period versus the earlier one (${months[0]} to ${months[months.length - 1]}).` });
-        recs.push(ch >= 0 ? `Sustain momentum in ${metric.name}; the later period is outperforming, so review what changed.` : `Investigate the decline in ${metric.name} in the most recent period and set a recovery target.`);
+        recs.push(ch >= 0 ? `Check what changed in ${metric.name} during the later period; the trend alone does not show the cause.` : `Investigate the decline in ${metric.name} in the later period to find its cause before setting a target.`);
         current = { months, monthly };
       }
     }
@@ -287,10 +308,10 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
     });
     const segs = dimCols.slice(0, 3).map(dc => {
       const g = {};
-      rows.forEach(r => { const k = String(r[dc.name] ?? 'Unknown'); const o = g[k] || (g[k] = { n: 0, sum: 0 }); o.n++; if (metric && isNum(r[metric.name])) o.sum += toNum(r[metric.name]); });
+      rows.forEach(r => { const k = String(r[dc.name] ?? 'Unknown'); const o = g[k] || (g[k] = { n: 0, m: 0, sum: 0 }); o.n++; if (metric && isNum(r[metric.name])) { o.sum += toNum(r[metric.name]); o.m++; } });
       const tot = Object.values(g).reduce((a, o) => a + o.sum, 0) || 1;
       return { name: dc.name, rows: Object.entries(g).sort((a, b) => b[1].sum - a[1].sum || b[1].n - a[1].n).slice(0, 10)
-        .map(([k, o]) => ({ k, n: o.n, sum: o.sum, avg: o.n ? o.sum / o.n : 0, share: o.sum / tot * 100, nShare: o.n / n * 100 })) };
+        .map(([k, o]) => ({ k, n: o.n, sum: o.sum, avg: o.m ? o.sum / o.m : 0, share: o.sum / tot * 100, nShare: o.n / n * 100 })) };
     });
     let biz = null;
     if (current && current.months && metric) {
@@ -319,9 +340,9 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
     }
     pairs.sort((x, y) => Math.abs(y.r) - Math.abs(x.r));
     const strong = pairs.filter(p => Math.abs(p.r) >= 0.5);
-    strong.slice(0, 3).forEach(p => insights.push({ lvl: 'good', t: `Hidden pattern: ${p.a} ↔ ${p.b}`, s: `${p.r > 0 ? 'Move together' : 'Move in opposite directions'} (r = ${fmt(p.r, 2)}). Useful for predicting one from the other.` }));
+    strong.slice(0, 3).forEach(p => insights.push({ lvl: 'good', t: `Association: ${p.a} ↔ ${p.b}`, s: `${p.r > 0 ? 'rise and fall together' : 'move in opposite directions'} (r = ${fmt(p.r, 2)}, ${Math.abs(p.r) >= 0.7 ? 'strong' : 'moderate'} linear association). This does not show that one causes the other.` }));
     if (!strong.length && pairs.length) insights.push({ lvl: 'info', t: 'No strong linear links', s: 'Numeric metrics appear largely independent; drivers may lie in categorical factors.' });
-    if (strong.length) recs.push('Use the strongest metric relationships as leading indicators in your planning models.');
+    if (strong.length) recs.push('Treat the strongest metric relationships as hypotheses to test with a holdout period before using them in planning.');
     if (!recs.length) recs.push('Collect a time or segment column to unlock trend and comparison analysis.');
 
     current = Object.assign(current || {}, { rows, cols, prof, numCols, dimCols, metric, dim, dateCol, name, n, dups, completeness, insights, recs, pairs, strong, numStats, segs, biz });
@@ -345,6 +366,11 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
     }
     if (d.dim) k.push(kpiCard('Segments', fmt(d.dim.unique, 0), `Dimension: ${d.dim.name}`));
     $('#kpis').innerHTML = k.join('');
+    const ms = $('#metricSel'), ds = $('#dimSel');
+    ms.innerHTML = d.numCols.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+    ms.value = d.metric ? d.metric.name : '';
+    ds.innerHTML = '<option value="">No segment</option>' + d.dimCols.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+    ds.value = d.dim ? d.dim.name : '';
 
     const lvlLabel = { good: 'Positive', warn: 'Attention', info: 'Info' };
     $('#insights').innerHTML = d.insights.map(i => `<li class="${i.lvl}"><b>${esc(i.t)} · ${lvlLabel[i.lvl]}</b><span>${esc(i.s)}</span></li>`).join('');
@@ -371,7 +397,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
       `Forecast for ${d.biz.nextMonth}: about ${fmt(d.biz.next)} (indicative, based on the linear trend only).`,
       `Best period: ${d.biz.best} (${fmt(d.biz.bestV)}). Weakest period: ${d.biz.worst} (${fmt(d.biz.worstV)}).`,
       `Latest period moved ${fmt(d.biz.mom)}% versus the previous period.`
-    ] : ['No date column was detected, so trend and forecast analysis is unavailable. Add a date column to unlock it.'];
+    ] : [d.dateCol ? 'Dates were found, but fewer than two months of valid data are available, so no trend or forecast can be shown.' : `No usable date column was found. Columns checked: ${d.prof.filter(p => /date|time|month|period|day|year/i.test(p.name)).map(p => p.name + ' (' + fmt(p.dateRate, 0) + '% readable as dates)').join(', ') || 'none with date-like names'}. Use readable dates such as 2024-03-15 or 15/03/2024.`];
     $('#biz').innerHTML = `<div class="card"><h2>Business view</h2>
       <div class="grid2" style="margin:0 0 6px">
         <div><div class="sub">Executive summary</div><ul class="bul">${bizLines.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>
@@ -509,6 +535,9 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
   ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', e => handleFile(e.dataTransfer.files[0]));
   $('#sample').onclick = sampleData;
+  const rerun = () => { if (lastArgs) analyze(lastArgs.rawRows, lastArgs.name, { metric: $('#metricSel').value, dim: $('#dimSel').value }); };
+  $('#metricSel').onchange = rerun;
+  $('#dimSel').onchange = rerun;
   $('#reset').onclick = () => { charts.forEach(c => c.destroy()); charts = []; current = null; $('#dash').classList.add('hidden'); $('#upload').classList.remove('hidden'); file.value = ''; };
   $('#report').onclick = () => {
     const b = new Blob([reportText(current)], { type: 'text/plain' });
