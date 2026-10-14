@@ -52,6 +52,10 @@ tr:hover td{background:#1a2440}
 .chart-box{position:relative;height:280px}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
 .err{color:var(--warn);margin-top:10px;font-size:14px}
+.sub{font-size:12px;margin:18px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.bul{margin:6px 0 0;padding-left:18px;font-size:14px;line-height:1.7}
+.contact{border-top:1px solid var(--line);margin-top:24px;padding:24px;color:var(--muted);font-size:13px;text-align:left}
+.contact a{color:#a9b9ff}
 </style>
 </head>
 <body>
@@ -128,9 +132,17 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
       <h2>Data preview <span class="muted" id="prevNote"></span></h2>
       <div class="tbl-wrap"><table><thead id="pvHead"></thead><tbody id="pvBody"></tbody></table></div>
     </div>
+    <div id="biz"></div>
+    <div id="analyst"></div>
   </section>
 </main>
-<footer>InsightDeck · Statistical analysis is automated; validate findings against your domain knowledge before major decisions.</footer>
+<footer class="contact">
+  <div style="max-width:1180px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+    <div><div style="color:var(--ink);font-weight:600;margin-bottom:4px">Contact</div>Email: <a href="mailto:omnaringe01@gmail.com">omnaringe01@gmail.com</a></div>
+    <a class="btn" href="https://omnaringe.github.io/cv/" target="_blank" rel="noopener">Open my portfolio</a>
+  </div>
+  <div style="max-width:1180px;margin:18px auto 0">InsightDeck · Statistical analysis is automated; validate findings against domain knowledge before major decisions.</div>
+</footer>
 
 <script>
 (() => {
@@ -195,6 +207,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
   }
 
   function analyze(rawRows, name) {
+    current = null;
     const rows = rawRows.filter(r => r && typeof r === 'object' && Object.values(r).some(v => v !== null && v !== undefined && v !== ''));
     if (!rows.length) { showErr('No usable rows were found in this file.'); return; }
     const cols = Object.keys(rows[0]).filter(c => c && c.trim() !== '');
@@ -267,6 +280,35 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
       }
     }
 
+    const numStats = numCols.map(p => {
+      const xs = rows.map(r => r[p.name]).filter(isNum).map(toNum), m = p.stats;
+      const skew = xs.length && m.sd ? xs.reduce((a, x) => a + ((x - m.mean) / m.sd) ** 3, 0) / xs.length : 0;
+      return { name: p.name, n: xs.length, mean: m.mean, median: m.median, sd: m.sd, min: m.min, max: m.max, cv: m.cv, skew, outliers: m.outliers, missing: p.missingPct };
+    });
+    const segs = dimCols.slice(0, 3).map(dc => {
+      const g = {};
+      rows.forEach(r => { const k = String(r[dc.name] ?? 'Unknown'); const o = g[k] || (g[k] = { n: 0, sum: 0 }); o.n++; if (metric && isNum(r[metric.name])) o.sum += toNum(r[metric.name]); });
+      const tot = Object.values(g).reduce((a, o) => a + o.sum, 0) || 1;
+      return { name: dc.name, rows: Object.entries(g).sort((a, b) => b[1].sum - a[1].sum || b[1].n - a[1].n).slice(0, 10)
+        .map(([k, o]) => ({ k, n: o.n, sum: o.sum, avg: o.n ? o.sum / o.n : 0, share: o.sum / tot * 100, nShare: o.n / n * 100 })) };
+    });
+    let biz = null;
+    if (current && current.months && metric) {
+      const ms = current.months, ys = ms.map(m => current.monthly[m]), N = ms.length;
+      const mx = (N - 1) / 2, my = ys.reduce((a, b) => a + b, 0) / N;
+      let num = 0, den = 0;
+      ys.forEach((y, i) => { num += (i - mx) * (y - my); den += (i - mx) ** 2; });
+      const slope = den ? num / den : 0, icpt = my - slope * mx;
+      const ssTot = ys.reduce((a, y) => a + (y - my) ** 2, 0);
+      const ssRes = ys.reduce((a, y, i) => a + (y - (icpt + slope * i)) ** 2, 0);
+      const [yy, mm] = ms[N - 1].split('-').map(Number);
+      const nd = new Date(yy, mm, 1);
+      const iMax = ys.indexOf(Math.max(...ys)), iMin = ys.indexOf(Math.min(...ys));
+      biz = { slope, r2: ssTot ? 1 - ssRes / ssTot : 0, next: icpt + slope * N,
+        nextMonth: `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`,
+        best: ms[iMax], bestV: ys[iMax], worst: ms[iMin], worstV: ys[iMin],
+        mom: N > 1 && ys[N - 2] ? (ys[N - 1] - ys[N - 2]) / Math.abs(ys[N - 2]) * 100 : 0 };
+    }
     const pairs = [];
     const cand = numCols.slice(0, 8);
     for (let i = 0; i < cand.length; i++) for (let j = i + 1; j < cand.length; j++) {
@@ -282,7 +324,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
     if (strong.length) recs.push('Use the strongest metric relationships as leading indicators in your planning models.');
     if (!recs.length) recs.push('Collect a time or segment column to unlock trend and comparison analysis.');
 
-    current = Object.assign(current || {}, { rows, cols, prof, numCols, dimCols, metric, dim, dateCol, name, n, dups, completeness, insights, recs, pairs, strong });
+    current = Object.assign(current || {}, { rows, cols, prof, numCols, dimCols, metric, dim, dateCol, name, n, dups, completeness, insights, recs, pairs, strong, numStats, segs, biz });
     render(current);
   }
 
@@ -324,6 +366,23 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
       return `<tr><td>${esc(p.name)}</td><td><span class="tag t-${p.type}">${p.type}</span></td><td>${fmt(p.missingPct)}%</td><td>${fmt(p.unique, 0)}</td><td>${detail}</td></tr>`;
     }).join('');
 
+    const bizLines = d.biz ? [
+      `Trend: ${d.metric.name} is ${d.biz.slope >= 0 ? 'rising' : 'falling'} by about ${fmt(Math.abs(d.biz.slope))} per period (R² ${fmt(d.biz.r2, 2)}; values near 1 mean a reliable straight-line trend).`,
+      `Forecast for ${d.biz.nextMonth}: about ${fmt(d.biz.next)} (indicative, based on the linear trend only).`,
+      `Best period: ${d.biz.best} (${fmt(d.biz.bestV)}). Weakest period: ${d.biz.worst} (${fmt(d.biz.worstV)}).`,
+      `Latest period moved ${fmt(d.biz.mom)}% versus the previous period.`
+    ] : ['No date column was detected, so trend and forecast analysis is unavailable. Add a date column to unlock it.'];
+    $('#biz').innerHTML = `<div class="card"><h2>Business view</h2>
+      <div class="grid2" style="margin:0 0 6px">
+        <div><div class="sub">Executive summary</div><ul class="bul">${bizLines.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>
+        <div><div class="sub">Scale</div><ul class="bul"><li>${fmt(d.n, 0)} records analysed</li>${d.metric ? `<li>Total ${esc(d.metric.name)}: ${fmt(d.metric.stats.sum)}</li><li>Average per record: ${fmt(d.metric.stats.mean)}</li><li>Median per record: ${fmt(d.metric.stats.median)}</li>` : ''}</ul></div>
+      </div>
+      ${d.segs.map(sg => `<div class="sub">Performance by ${esc(sg.name)}</div><div class="tbl-wrap"><table><thead><tr><th>${esc(sg.name)}</th><th>Records</th><th>% of records</th><th>Total ${esc(d.metric ? d.metric.name : 'value')}</th><th>% of total</th><th>Average</th></tr></thead><tbody>${sg.rows.map(x => `<tr><td>${esc(x.k)}</td><td>${fmt(x.n, 0)}</td><td>${fmt(x.nShare)}%</td><td>${fmt(x.sum)}</td><td>${fmt(x.share)}%</td><td>${fmt(x.avg)}</td></tr>`).join('')}</tbody></table></div>`).join('')}
+    </div>`;
+    $('#analyst').innerHTML = `<div class="card"><h2>Analyst view: descriptive statistics</h2>
+      <div class="tbl-wrap"><table><thead><tr><th>Column</th><th>N</th><th>Mean</th><th>Median</th><th>Std dev</th><th>Min</th><th>Max</th><th>CV</th><th>Skew</th><th>Outliers</th><th>Missing</th></tr></thead><tbody>${d.numStats.map(s => `<tr><td>${esc(s.name)}</td><td>${fmt(s.n, 0)}</td><td>${fmt(s.mean)}</td><td>${fmt(s.median)}</td><td>${fmt(s.sd)}</td><td>${fmt(s.min)}</td><td>${fmt(s.max)}</td><td>${fmt(s.cv)}</td><td>${fmt(s.skew)}</td><td>${fmt(s.outliers, 0)}</td><td>${fmt(s.missing)}%</td></tr>`).join('') || '<tr><td colspan="11" class="muted">No numeric columns found.</td></tr>'}</tbody></table></div>
+      <div class="muted" style="margin-top:8px">Skew near 0 means symmetric; beyond ±1 is strongly skewed. CV above 1 means high variability. Outliers use the 1.5×IQR rule.</div>
+    </div>`;
     const pc = d.cols.slice(0, 12);
     $('#pvHead').innerHTML = '<tr>' + pc.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
     $('#pvBody').innerHTML = d.rows.slice(0, 50).map(r => '<tr>' + pc.map(c => `<td>${esc(r[c] instanceof Date ? r[c].toISOString().slice(0, 10) : r[c])}</td>`).join('') + '</tr>').join('');
