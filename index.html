@@ -474,11 +474,13 @@ document.addEventListener('keydown', e => {
     const label = $('#drop strong'), original = label.textContent;
     $('#uploadErr').classList.add('hidden');
     if (API_URL.includes('YOUR-BACKEND')) { showErr('Power BI support needs the parser service. Deploy the backend and set API_URL in the page code.'); return; }
-    label.textContent = 'Reading Power BI model… this can take a minute';
+    const started = Date.now();
+    const tick = setInterval(() => { label.textContent = `Reading Power BI model… ${Math.round((Date.now() - started) / 1000)}s elapsed`; }, 1000);
+    const ctl = new AbortController(), kill = setTimeout(() => ctl.abort(), 240000);
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await fetch(API_URL, { method: 'POST', body: fd });
+      const res = await fetch(API_URL, { method: 'POST', body: fd, signal: ctl.signal });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.detail || 'server error ' + res.status);
       const names = Object.keys(j.tables || {}).filter(n => j.tables[n].length);
@@ -488,8 +490,9 @@ document.addEventListener('keydown', e => {
       const base = file.name.replace(/\.(pbix|pbit)$/i, '');
       analyze(j.tables[pick], base + ' · ' + pick + (names.length > 1 ? ` (largest of ${names.length} tables)` : ''));
     } catch (e) {
-      showErr('Could not read the Power BI file: ' + e.message + ' If the service was idle, wait a minute and try again.');
+      showErr('Could not read the Power BI file: ' + (e.name === 'AbortError' ? 'the server did not respond within 4 minutes' : e.message) + '. Check the parser logs on Render (Logs tab), or try a smaller file.');
     } finally {
+      clearInterval(tick); clearTimeout(kill);
       label.textContent = original;
     }
   }
