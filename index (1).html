@@ -135,7 +135,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
 <script>
 (() => {
   // Address of your parser service (see backend/ folder). Set this after you deploy it.
-  const API_URL = 'https://YOUR-BACKEND.onrender.com/api/parse';
+  const API_URL = 'https://insightdeck-6aeh.onrender.com/api/parse';
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt = (n, d = 2) => (n == null || !isFinite(n)) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
