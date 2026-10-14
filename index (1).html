@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>InsightDeck – Automated Data Analysis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{color-scheme:dark;--bg:#0a0f1d;--card:#121a2e;--ink:#e6ebf5;--muted:#8a94ab;--line:#24304e;--brand:#5b7cff;--good:#40c057;--warn:#ff922b;--info:#4dabf7;--radius:14px}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:linear-gradient(120deg,#070b17,#16205a);color:#e6ebf5;padding:28px 24px;border-bottom:1px solid var(--line)}
+header .wrap{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+h1{margin:0;font-size:22px;letter-spacing:.2px}
+header p{margin:4px 0 0;opacity:.85;font-size:14px}
+.wrap{max-width:1180px;margin:0 auto;padding:24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.card h2{font-size:16px;margin:0 0 12px}
+.btn{appearance:none;border:1px solid var(--brand);background:var(--brand);color:#fff;padding:9px 16px;border-radius:9px;cursor:pointer;font-weight:600;font-size:14px}
+.btn.ghost{background:transparent;color:#a9b9ff;border-color:#3a4a80}
+.btn:hover{filter:brightness(1.07)}
+.drop{border:2px dashed #2c3a60;border-radius:var(--radius);padding:44px 20px;text-align:center;background:#0f1629;cursor:pointer;transition:.2s}
+.drop.over{border-color:var(--brand);background:#172048}
+.drop strong{display:block;font-size:17px;margin-bottom:6px}
+.muted{color:var(--muted);font-size:13px}
+.row{display:flex;gap:12px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+.hidden{display:none!important}
+.meta{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:4px 0 18px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.kpi .l{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.kpi .v{font-size:24px;font-weight:700;margin-top:4px;word-break:break-word}
+.kpi .s{font-size:12px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1.2fr 1fr;gap:18px;margin-bottom:18px}
+.grid3{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+@media(max-width:860px){.grid2,.grid3{grid-template-columns:1fr}}
+ul.ins{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+ul.ins li{padding:10px 12px;border-radius:10px;border-left:4px solid var(--info);background:#101d38}
+ul.ins li.good{border-color:var(--good);background:#0f2a1c}
+ul.ins li.warn{border-color:var(--warn);background:#2e1d12}
+ul.ins li b{display:block;font-size:13px;margin-bottom:2px}
+ul.ins li span{font-size:14px}
+.tbl-wrap{overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:#182240;font-weight:600;color:#c9d3ea;z-index:1}
+tr:hover td{background:#1a2440}
+.tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}
+.t-numeric{background:#13294b;color:#74c0fc}.t-category{background:#241c46;color:#b197fc}.t-date{background:#0f2e27;color:#63e6be}.t-text{background:#1e2535;color:#adb5bd}
+.chart-box{position:relative;height:280px}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
+.err{color:var(--warn);margin-top:10px;font-size:14px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap" style="padding-bottom:0">
+    <div>
+      <h1>InsightDeck</h1>
+      <p>Upload a dataset. Get KPIs, hidden patterns, risks and decision-ready insights.</p>
+    </div>
+    <div class="muted" style="color:#dfe6ff">Runs fully in your browser · No data leaves your device</div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- UPLOAD -->
+  <section id="upload" class="card">
+    <div class="drop" id="drop">
+      <strong>Drop your dataset here or click to browse</strong>
+      <div class="muted">Supported: CSV, XLSX, XLS, JSON, plus Power BI and Tableau exports · first sheet is analysed</div>
+      <div class="row">
+        <button class="btn" id="browse" type="button">Choose file</button>
+        <button class="btn ghost" id="sample" type="button">Try sample sales data</button>
+      </div>
+      <input type="file" id="file" accept=".csv,.txt,.xlsx,.xls,.json,.pbix,.pbit,.twb,.twbx,.tds,.tdsx,.hyper" hidden>
+    </div>
+    <div id="uploadErr" class="err hidden"></div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="dash" class="hidden">
+    <div class="meta">
+      <div>
+        <h2 id="title" style="margin:0;font-size:20px">Dashboard</h2>
+        <div class="muted" id="subtitle"></div>
+      </div>
+      <div class="row" style="margin:0">
+        <button class="btn ghost" id="copy" type="button">Copy summary</button>
+        <button class="btn" id="report" type="button">Download report (.txt)</button>
+        <button class="btn ghost" id="reset" type="button">New dataset</button>
+      </div>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Key findings & hidden patterns</h2>
+        <ul class="ins" id="insights"></ul>
+      </div>
+      <div class="card">
+        <h2>Recommended actions for decision makers</h2>
+        <ul class="ins" id="recs"></ul>
+      </div>
+    </div>
+
+    <div class="grid3">
+      <div class="card"><h2 id="c1title">Performance by segment</h2><div class="chart-box"><canvas id="c1"></canvas></div></div>
+      <div class="card"><h2 id="c2title">Trend over time</h2><div class="chart-box"><canvas id="c2"></canvas></div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Strongest relationships between metrics</h2>
+        <div class="tbl-wrap"><table><thead><tr><th>Metric A</th><th>Metric B</th><th>Correlation (r)</th><th>Strength</th></tr></thead><tbody id="corr"></tbody></table></div>
+        <div class="muted" style="margin-top:8px">Correlation shows association, not causation. Validate before acting.</div>
+      </div>
+      <div class="card">
+        <h2>Column profile & data quality</h2>
+        <div class="tbl-wrap"><table><thead><tr><th>Column</th><th>Type</th><th>Missing</th><th>Unique</th><th>Detail</th></tr></thead><tbody id="profile"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Data preview <span class="muted" id="prevNote"></span></h2>
+      <div class="tbl-wrap"><table><thead id="pvHead"></thead><tbody id="pvBody"></tbody></table></div>
+    </div>
+  </section>
+</main>
+<footer>InsightDeck · Statistical analysis is automated; validate findings against your domain knowledge before major decisions.</footer>
+
+<script>
+(() => {
+  // Address of your parser service (see backend/ folder). Set this after you deploy it.
+  const API_URL = 'https://YOUR-BACKEND.onrender.com/api/parse';
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt = (n, d = 2) => (n == null || !isFinite(n)) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
+  const isNum = v => typeof v === 'number' ? isFinite(v) : (typeof v === 'string' && v.trim() !== '' && isFinite(Number(v)));
+  const toNum = v => typeof v === 'number' ? v : Number(v);
+  const isDate = v => v instanceof Date || (typeof v === 'string' && /^\d{4}[-\/]\d{1,2}([-\/]\d{1,2})?/.test(v.trim()) && !isNaN(Date.parse(v)));
+  const quant = (xs, q) => { const p = (xs.length - 1) * q, lo = Math.floor(p), hi = Math.ceil(p); return xs[lo] + (xs[hi] - xs[lo]) * (p - lo); };
+  const monthKey = v => v instanceof Date
+    ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+    : String(v).replace(/\//g, '-').slice(0, 7);
+  const isIdName = n => /(^|[_\s])id$|^id$/i.test(n);
+  const isMetricName = n => /revenue|sales|amount|total|price|profit|value|units|cost|qty|quantity|income/i.test(n);
+  const isDimName = n => /region|product|category|segment|type|channel|city|country|status|group|department|brand/i.test(n);
+
+  let charts = [];
+  let current = null;
+
+  function profile(rows, cols) {
+    const n = rows.length;
+    return cols.map(c => {
+      const vals = rows.map(r => r[c]).filter(v => v !== null && v !== undefined && v !== '');
+      const missing = n - vals.length;
+      const numCount = vals.filter(isNum).length;
+      const dateCount = vals.filter(isDate).length;
+      const unique = new Set(vals.map(v => String(v instanceof Date ? v.toISOString() : v))).size;
+      let type = 'text';
+      if (vals.length && numCount / vals.length > 0.9) type = 'numeric';
+      else if (vals.length && dateCount / vals.length > 0.9) type = 'date';
+      else if (unique <= Math.max(20, n * 0.3)) type = 'category';
+      const p = { name: c, type, missing, missingPct: n ? missing / n * 100 : 0, unique };
+      if (type === 'numeric') {
+        const xs = vals.filter(isNum).map(toNum).sort((a, b) => a - b);
+        const sum = xs.reduce((a, b) => a + b, 0), mean = sum / xs.length;
+        const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / xs.length);
+        const q1 = quant(xs, .25), q3 = quant(xs, .75), iqr = q3 - q1;
+        p.stats = { sum, mean, sd, median: quant(xs, .5), min: xs[0], max: xs[xs.length - 1],
+          outliers: xs.filter(x => x < q1 - 1.5 * iqr || x > q3 + 1.5 * iqr).length };
+        p.stats.cv = mean ? sd / Math.abs(mean) : 0;
+      }
+      if (type === 'category' && vals.length) {
+        const freq = {};
+        vals.forEach(v => { const k = String(v); freq[k] = (freq[k] || 0) + 1; });
+        const top = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+        p.top = top.slice(0, 8);
+        p.topShare = top[0][1] / vals.length * 100;
+      }
+      return p;
+    });
+  }
+
+  function pearson(xs, ys) {
+    const n = xs.length; if (n < 3) return null;
+    const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+    let num = 0, dx = 0, dy = 0;
+    for (let i = 0; i < n; i++) { num += (xs[i] - mx) * (ys[i] - my); dx += (xs[i] - mx) ** 2; dy += (ys[i] - my) ** 2; }
+    return dx && dy ? num / Math.sqrt(dx * dy) : null;
+  }
+
+  function analyze(rawRows, name) {
+    const rows = rawRows.filter(r => r && typeof r === 'object' && Object.values(r).some(v => v !== null && v !== undefined && v !== ''));
+    if (!rows.length) { showErr('No usable rows were found in this file.'); return; }
+    const cols = Object.keys(rows[0]).filter(c => c && c.trim() !== '');
+    const prof = profile(rows, cols);
+    const n = rows.length;
+    const numCols = prof.filter(p => p.type === 'numeric' && !isIdName(p.name) && p.unique < n * .98);
+    const dimCols = prof.filter(p => p.type === 'category' && p.unique > 1 && p.unique < n * .5);
+    const dateCol = prof.find(p => p.type === 'date');
+    const seen = new Set(); let dups = 0;
+    rows.forEach(r => { const k = JSON.stringify(r); seen.has(k) ? dups++ : seen.add(k); });
+    const avgMissing = prof.reduce((a, p) => a + p.missingPct, 0) / prof.length;
+    const completeness = 100 - avgMissing;
+
+    const metric = numCols.find(p => isMetricName(p.name)) || numCols[0];
+    const dim = dimCols.find(p => isDimName(p.name)) || dimCols[0];
+    const insights = [], recs = [];
+
+    insights.push({ lvl: 'info', t: 'Dataset scope', s: `${fmt(n, 0)} records across ${cols.length} columns (${numCols.length} numeric, ${dimCols.length} categorical${dateCol ? ', 1 date' : ''}).` });
+    if (completeness < 95) {
+      insights.push({ lvl: 'warn', t: 'Data completeness risk', s: `${fmt(avgMissing)}% of values are missing on average. Results on sparse columns may be unreliable.` });
+      recs.push('Fix missing-value gaps at the source before reporting, or document how they were handled.');
+    } else insights.push({ lvl: 'good', t: 'Good data completeness', s: `${fmt(completeness)}% of values are populated.` });
+    if (dups) {
+      insights.push({ lvl: 'warn', t: 'Duplicate records', s: `${fmt(dups, 0)} exact duplicate rows detected, which can inflate totals.` });
+      recs.push('Deduplicate records to avoid overstated totals and counts.');
+    }
+
+    if (metric) {
+      const s = metric.stats;
+      insights.push({ lvl: 'info', t: `${metric.name}: total & average`, s: `Total ${fmt(s.sum)}, average ${fmt(s.mean)}, median ${fmt(s.median)}, range ${fmt(s.min)} to ${fmt(s.max)}.` });
+      if (Math.abs(s.mean - s.median) > 0.2 * Math.abs(s.median || 1)) {
+        insights.push({ lvl: 'warn', t: 'Skewed distribution', s: `Mean and median of ${metric.name} differ noticeably, so a few large values are pulling the average.` });
+        recs.push(`Report the median alongside the average for ${metric.name} to give leaders a realistic typical value.`);
+      }
+      if (s.outliers) {
+        insights.push({ lvl: 'warn', t: 'Outliers detected', s: `${fmt(s.outliers, 0)} unusual values in ${metric.name} (outside 1.5×IQR). Investigate whether these are errors or high-value events.` });
+        recs.push(`Review the ${fmt(s.outliers, 0)} outlier records in ${metric.name} before forecasting.`);
+      }
+      if (s.cv > 1) insights.push({ lvl: 'warn', t: 'High volatility', s: `${metric.name} varies widely relative to its average, indicating an unstable process.` });
+    }
+
+    if (dim && metric) {
+      const groups = {};
+      rows.forEach(r => { const k = String(r[dim.name] ?? 'Unknown'); const v = isNum(r[metric.name]) ? toNum(r[metric.name]) : 0; groups[k] = (groups[k] || 0) + v; });
+      const sorted = Object.entries(groups).sort((a, b) => b[1] - a[1]);
+      const tot = sorted.reduce((a, b) => a + b[1], 0) || 1;
+      const [topK, topV] = sorted[0], [lowK, lowV] = sorted[sorted.length - 1];
+      insights.push({ lvl: 'good', t: `Top ${dim.name}: ${topK}`, s: `${topK} contributes ${fmt(topV / tot * 100)}% of ${metric.name}, the largest share among ${sorted.length} ${dim.name} values.` });
+      if (sorted.length > 1) insights.push({ lvl: 'info', t: `Lowest ${dim.name}: ${lowK}`, s: `${lowK} contributes ${fmt(lowV / tot * 100)}% of ${metric.name}. The gap to the top segment is ${fmt(topV && (topV - lowV) / topV * 100)}%.` });
+      if (topV / tot > .5) {
+        insights.push({ lvl: 'warn', t: 'Concentration risk', s: `One ${dim.name} drives over half of ${metric.name}. Losing it would significantly hurt results.` });
+        recs.push(`Diversify ${metric.name} across ${dim.name} segments or build contingency plans for ${topK}.`);
+      }
+      recs.push(`Prioritise investment in ${topK} and examine what drives its success for replication in ${lowK}.`);
+    }
+
+    if (dateCol && metric) {
+      const monthly = {};
+      rows.forEach(r => { if (r[dateCol.name] == null) return; const k = monthKey(r[dateCol.name]); if (!k) return; monthly[k] = (monthly[k] || 0) + (isNum(r[metric.name]) ? toNum(r[metric.name]) : 0); });
+      const months = Object.keys(monthly).sort();
+      if (months.length >= 2) {
+        const half = Math.floor(months.length / 2);
+        const avg = a => a.reduce((x, y) => x + y, 0) / (a.length || 1);
+        const h1 = avg(months.slice(0, half).map(m => monthly[m])), h2 = avg(months.slice(half).map(m => monthly[m]));
+        const ch = h1 ? (h2 - h1) / Math.abs(h1) * 100 : 0;
+        const lvl = ch >= 0 ? 'good' : 'warn';
+        insights.push({ lvl, t: 'Trend direction', s: `${metric.name} ${ch >= 0 ? 'rose' : 'fell'} ${fmt(Math.abs(ch))}% in the later period versus the earlier one (${months[0]} to ${months[months.length - 1]}).` });
+        recs.push(ch >= 0 ? `Sustain momentum in ${metric.name}; the later period is outperforming, so review what changed.` : `Investigate the decline in ${metric.name} in the most recent period and set a recovery target.`);
+        current = { months, monthly };
+      }
+    }
+
+    const pairs = [];
+    const cand = numCols.slice(0, 8);
+    for (let i = 0; i < cand.length; i++) for (let j = i + 1; j < cand.length; j++) {
+      const xs = [], ys = [];
+      rows.forEach(r => { if (isNum(r[cand[i].name]) && isNum(r[cand[j].name])) { xs.push(toNum(r[cand[i].name])); ys.push(toNum(r[cand[j].name])); } });
+      const r = pearson(xs, ys);
+      if (r != null) pairs.push({ a: cand[i].name, b: cand[j].name, r });
+    }
+    pairs.sort((x, y) => Math.abs(y.r) - Math.abs(x.r));
+    const strong = pairs.filter(p => Math.abs(p.r) >= 0.5);
+    strong.slice(0, 3).forEach(p => insights.push({ lvl: 'good', t: `Hidden pattern: ${p.a} ↔ ${p.b}`, s: `${p.r > 0 ? 'Move together' : 'Move in opposite directions'} (r = ${fmt(p.r, 2)}). Useful for predicting one from the other.` }));
+    if (!strong.length && pairs.length) insights.push({ lvl: 'info', t: 'No strong linear links', s: 'Numeric metrics appear largely independent; drivers may lie in categorical factors.' });
+    if (strong.length) recs.push('Use the strongest metric relationships as leading indicators in your planning models.');
+    if (!recs.length) recs.push('Collect a time or segment column to unlock trend and comparison analysis.');
+
+    current = Object.assign(current || {}, { rows, cols, prof, numCols, dimCols, metric, dim, dateCol, name, n, dups, completeness, insights, recs, pairs, strong });
+    render(current);
+  }
+
+  function kpiCard(l, v, s = '') { return `<div class="kpi"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div></div>`; }
+
+  function render(d) {
+    $('#upload').classList.add('hidden');
+    $('#dash').classList.remove('hidden');
+    $('#title').textContent = d.name;
+    $('#subtitle').textContent = `${fmt(d.n, 0)} rows · ${d.cols.length} columns · analysed ${new Date().toLocaleString()}`;
+
+    const k = [kpiCard('Records', fmt(d.n, 0), 'Rows analysed'), kpiCard('Completeness', fmt(d.completeness) + '%', 'Populated values'),
+      kpiCard('Duplicate rows', fmt(d.dups, 0), d.dups ? 'Review needed' : 'None found')];
+    if (d.metric) {
+      const s = d.metric.stats;
+      k.push(kpiCard(`Total ${d.metric.name}`, fmt(s.sum), 'Sum across all rows'));
+      k.push(kpiCard(`Avg ${d.metric.name}`, fmt(s.mean), `Median ${fmt(s.median)}`));
+    }
+    if (d.dim) k.push(kpiCard('Segments', fmt(d.dim.unique, 0), `Dimension: ${d.dim.name}`));
+    $('#kpis').innerHTML = k.join('');
+
+    const lvlLabel = { good: 'Positive', warn: 'Attention', info: 'Info' };
+    $('#insights').innerHTML = d.insights.map(i => `<li class="${i.lvl}"><b>${esc(i.t)} · ${lvlLabel[i.lvl]}</b><span>${esc(i.s)}</span></li>`).join('');
+    $('#recs').innerHTML = d.recs.map((r, i) => `<li><b>Action ${i + 1}</b><span>${esc(r)}</span></li>`).join('');
+
+    drawCharts(d);
+
+    $('#corr').innerHTML = d.pairs.slice(0, 10).map(p => {
+      const a = Math.abs(p.r), st = a >= .7 ? 'Strong' : a >= .5 ? 'Moderate' : a >= .3 ? 'Weak' : 'None';
+      return `<tr><td>${esc(p.a)}</td><td>${esc(p.b)}</td><td>${fmt(p.r, 3)}</td><td>${st}</td></tr>`;
+    }).join('') || '<tr><td colspan="4" class="muted">Not enough numeric columns for correlation.</td></tr>';
+
+    $('#profile').innerHTML = d.prof.map(p => {
+      let detail = '';
+      if (p.type === 'numeric') detail = `min ${fmt(p.stats.min)} · max ${fmt(p.stats.max)} · outliers ${fmt(p.stats.outliers, 0)}`;
+      else if (p.type === 'category') detail = `top: ${esc(p.top[0][0])} (${fmt(p.topShare)}%)`;
+      else if (p.type === 'date') detail = 'Used for trend analysis';
+      else detail = 'Free text / identifiers';
+      return `<tr><td>${esc(p.name)}</td><td><span class="tag t-${p.type}">${p.type}</span></td><td>${fmt(p.missingPct)}%</td><td>${fmt(p.unique, 0)}</td><td>${detail}</td></tr>`;
+    }).join('');
+
+    const pc = d.cols.slice(0, 12);
+    $('#pvHead').innerHTML = '<tr>' + pc.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
+    $('#pvBody').innerHTML = d.rows.slice(0, 50).map(r => '<tr>' + pc.map(c => `<td>${esc(r[c] instanceof Date ? r[c].toISOString().slice(0, 10) : r[c])}</td>`).join('') + '</tr>').join('');
+    $('#prevNote').textContent = `(first ${Math.min(50, d.n)} rows, ${Math.min(12, d.cols.length)} of ${d.cols.length} columns)`;
+  }
+
+  function drawCharts(d) {
+    charts.forEach(c => c.destroy()); charts = [];
+    Chart.defaults.font.family = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    Chart.defaults.color = '#6b7587';
+    if (d.metric && d.dim) {
+      const g = {};
+      d.rows.forEach(r => { const k = String(r[d.dim.name] ?? 'Unknown'); g[k] = (g[k] || 0) + (isNum(r[d.metric.name]) ? toNum(r[d.metric.name]) : 0); });
+      const e = Object.entries(g).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      $('#c1title').textContent = `${d.metric.name} by ${d.dim.name}`;
+      charts.push(new Chart($('#c1'), { type: 'bar', data: { labels: e.map(x => x[0]), datasets: [{ label: d.metric.name, data: e.map(x => x[1]), backgroundColor: '#3b5bdb', borderRadius: 6 }] },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1f2a44' } }, x: { grid: { display: false } } } } }));
+    } else {
+      $('#c1title').textContent = 'Column overview';
+      const e = d.prof.filter(p => p.type !== 'text').slice(0, 8);
+      charts.push(new Chart($('#c1'), { type: 'bar', data: { labels: e.map(p => p.name), datasets: [{ label: 'Unique values', data: e.map(p => p.unique), backgroundColor: '#748ffc', borderRadius: 6 }] },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false } } } }));
+    }
+    if (current && current.months) {
+      $('#c2title').textContent = `${d.metric.name} over time`;
+      charts.push(new Chart($('#c2'), { type: 'line', data: { labels: current.months, datasets: [{ label: d.metric.name, data: current.months.map(m => current.monthly[m]), borderColor: '#2f9e44', backgroundColor: 'rgba(47,158,68,.12)', fill: true, tension: .3, pointRadius: 2 }] },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1f2a44' } }, x: { grid: { display: false } } } } }));
+    } else if (d.dim) {
+      $('#c2title').textContent = `Share of records by ${d.dim.name}`;
+      const e = d.dim.top;
+      charts.push(new Chart($('#c2'), { type: 'doughnut', data: { labels: e.map(x => x[0]), datasets: [{ data: e.map(x => x[1]), backgroundColor: ['#3b5bdb','#748ffc','#2f9e44','#f59f00','#e8590c','#ae3ec9','#1c7ed6','#adb5bd'] }] },
+        options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } } }));
+    }
+  }
+
+  function reportText(d) {
+    const L = [`INSIGHTDECK REPORT — ${d.name}`, `Generated: ${new Date().toLocaleString()}`, '',
+      `Records: ${d.n} | Columns: ${d.cols.length} | Completeness: ${fmt(d.completeness)}% | Duplicates: ${d.dups}`, '', 'KEY FINDINGS'];
+    d.insights.forEach(i => L.push(`- [${i.lvl.toUpperCase()}] ${i.t}: ${i.s}`));
+    L.push('', 'RECOMMENDED ACTIONS'); d.recs.forEach((r, i) => L.push(`${i + 1}. ${r}`));
+    L.push('', 'COLUMN PROFILE');
+    d.prof.forEach(p => L.push(`- ${p.name} (${p.type}): missing ${fmt(p.missingPct)}%, unique ${p.unique}`));
+    L.push('', 'Note: Automated statistical analysis. Validate against domain knowledge before major decisions.');
+    return L.join('\n');
+  }
+
+  function showErr(m) { const e = $('#uploadErr'); e.textContent = m; e.classList.remove('hidden'); }
+
+  async function sendToServer(file) {
+    const label = $('#drop strong'), original = label.textContent;
+    $('#uploadErr').classList.add('hidden');
+    if (API_URL.includes('YOUR-BACKEND')) { showErr('Power BI support needs the parser service. Deploy the backend and set API_URL in the page code.'); return; }
+    label.textContent = 'Reading Power BI model… this can take a minute';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(API_URL, { method: 'POST', body: fd });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.detail || 'server error ' + res.status);
+      const names = Object.keys(j.tables || {}).filter(n => j.tables[n].length);
+      if (!names.length) throw new Error('no data tables were found in this file.');
+      names.sort((a, b) => j.tables[b].length - j.tables[a].length);
+      const pick = names[0];
+      const base = file.name.replace(/\.(pbix|pbit)$/i, '');
+      analyze(j.tables[pick], base + ' · ' + pick + (names.length > 1 ? ` (largest of ${names.length} tables)` : ''));
+    } catch (e) {
+      showErr('Could not read the Power BI file: ' + e.message + ' If the service was idle, wait a minute and try again.');
+    } finally {
+      label.textContent = original;
+    }
+  }
+
+  function handleFile(file) {
+    if (!file) return;
+    $('#uploadErr').classList.add('hidden');
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (['pbix', 'pbit'].includes(ext)) { sendToServer(file); return; }
+    try {
+      if (ext === 'csv' || ext === 'txt') {
+        Papa.parse(file, { header: true, skipEmptyLines: true, dynamicTyping: true,
+          complete: r => analyze(r.data, file.name), error: e => showErr('Could not read CSV: ' + e.message) });
+      } else if (['xlsx', 'xls'].includes(ext)) {
+        const rd = new FileReader();
+        rd.onload = e => {
+          const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+          analyze(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null }), file.name);
+        };
+        rd.readAsArrayBuffer(file);
+      } else if (ext === 'json') {
+        const rd = new FileReader();
+        rd.onload = e => {
+          const j = JSON.parse(e.target.result);
+          const arr = Array.isArray(j) ? j : (Object.values(j).find(Array.isArray) || []);
+          analyze(arr, file.name);
+        };
+        rd.readAsText(file);
+      } else if (['pbix', 'pbit'].includes(ext)) showErr('Power BI files (.pbix/.pbit) are compressed models that browsers cannot read. In Power BI, select the visual, choose ⋯ → Export data (CSV or Excel), then upload that file here.');
+      else if (['twb', 'twbx', 'tds', 'tdsx', 'hyper'].includes(ext)) showErr('Tableau workbook and extract files (.twb/.twbx/.tds/.hyper) are packed binary formats. In Tableau, open the view and choose Worksheet → Export → Data (or View Data → Export All), then upload the CSV here.');
+      else showErr('Unsupported file type. Use CSV, XLSX, XLS, JSON, or data exported from Power BI or Tableau.');
+    } catch (err) { showErr('Could not parse this file: ' + err.message); }
+  }
+
+  function sampleData() {
+    const regions = ['North', 'South', 'East', 'West'], products = ['Starter', 'Pro', 'Enterprise'];
+    const rows = [];
+    for (let i = 0; i < 180; i++) {
+      const d = new Date(2024, 0, 1); d.setDate(d.getDate() + Math.floor(i * 2));
+      const region = regions[Math.floor(Math.random() * 4)], product = products[Math.floor(Math.random() * 3)];
+      const units = Math.floor(5 + Math.random() * 40 + (region === 'North' ? 15 : 0) + i * .1);
+      const price = { Starter: 49, Pro: 129, Enterprise: 399 }[product];
+      const discount = +(Math.random() * .3).toFixed(2);
+      rows.push({ Date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+        Region: region, Product: product, Units: units, Discount: discount,
+        Revenue: Math.round(units * price * (1 - discount)), Customer_ID: 'C' + (1000 + i) });
+    }
+    analyze(rows, 'sample_sales_data.csv');
+  }
+
+  const drop = $('#drop'), file = $('#file');
+  $('#browse').onclick = () => file.click();
+  drop.onclick = e => { if (e.target.tagName !== 'BUTTON') file.click(); };
+  file.onchange = e => handleFile(e.target.files[0]);
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => handleFile(e.dataTransfer.files[0]));
+  $('#sample').onclick = sampleData;
+  $('#reset').onclick = () => { charts.forEach(c => c.destroy()); charts = []; current = null; $('#dash').classList.add('hidden'); $('#upload').classList.remove('hidden'); file.value = ''; };
+  $('#report').onclick = () => {
+    const b = new Blob([reportText(current)], { type: 'text/plain' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'insightdeck_report.txt'; a.click();
+  };
+  $('#copy').onclick = () => { navigator.clipboard?.writeText(reportText(current)); $('#copy').textContent = 'Copied'; setTimeout(() => $('#copy').textContent = 'Copy summary', 1500); };
+})();
+</script>
+</body>
+</html>
