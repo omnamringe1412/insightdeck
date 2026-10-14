@@ -1,5 +1,6 @@
 """InsightDeck parser service: reads Power BI (.pbix/.pbit), CSV and Excel files
 and returns their tables as JSON for the InsightDeck web page."""
+import gc
 import json
 import os
 import tempfile
@@ -9,7 +10,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pbixray import PBIXRay
 
-MAX_ROWS = 200_000          # rows returned per table
+MAX_ROWS = 50_000           # rows returned per table (lower = less memory)
 MAX_BYTES = 300 * 1024 * 1024  # 300 MB upload limit
 
 # Hide interactive API docs so the endpoint is not advertised publicly.
@@ -45,14 +46,18 @@ def df_to_records(df: pd.DataFrame):
 
 
 def parse_pbix(path: str, name: str):
-    model = PBIXRay(path)
+    # on_disk=True keeps memory low, which matters on Render's free 512 MB plan.
+    model = PBIXRay(path, on_disk=True)
     try:
         tables = {}
         for t in model.tables:
             if t.startswith(("LocalDateTable", "DateTableTemplate")):
                 continue  # Power BI's hidden auto-date tables
             try:
-                tables[t] = df_to_records(model.get_table(t))
+                df = model.get_table(t)
+                tables[t] = df_to_records(df)
+                del df
+                gc.collect()  # free memory before loading the next table
             except Exception:
                 continue
         measures = []
