@@ -12,13 +12,29 @@ from pbixray import PBIXRay
 MAX_ROWS = 200_000          # rows returned per table
 MAX_BYTES = 300 * 1024 * 1024  # 300 MB upload limit
 
-app = FastAPI(title="InsightDeck Parser")
+# Hide interactive API docs so the endpoint is not advertised publicly.
+app = FastAPI(title="InsightDeck Parser", docs_url=None, redoc_url=None, openapi_url=None)
+
+# Only the InsightDeck site may call this service from a browser.
+ALLOWED_ORIGINS = [
+    "https://omnamringe1412.github.io",
+    "http://localhost:8000",  # local testing only
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # the page is public; no secrets are involved
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 def df_to_records(df: pd.DataFrame):
@@ -60,7 +76,7 @@ def health():
 async def parse(file: UploadFile = File(...)):
     name = file.filename or "upload"
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-    data = await file.read()
+    data = await file.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "File is larger than 300 MB")
     if ext not in ("pbix", "pbit", "csv", "txt", "xlsx", "xls"):
@@ -79,4 +95,5 @@ async def parse(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(422, f"Could not read file: {e}")
     finally:
+        # Uploaded files are deleted immediately after they are read.
         os.remove(path)
