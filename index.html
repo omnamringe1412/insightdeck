@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://insightdeck-6aeh.onrender.com; img-src 'self' data: blob:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noarchive">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>InsightDeck – Automated Data Analysis</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -143,9 +146,19 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
     <a class="btn" href="https://omnaringe.github.io/cv/" target="_blank" rel="noopener">Open my portfolio</a>
   </div>
   <div style="max-width:1180px;margin:18px auto 0">InsightDeck · Statistical analysis is automated; validate findings against domain knowledge before major decisions.</div>
+  <div style="max-width:1180px;margin:14px auto 0;font-size:12px"><b style="color:var(--ink)">Privacy:</b> No accounts, cookies, analytics or trackers are used. CSV, Excel and JSON files are analysed in your browser and are never uploaded. Power BI files are sent over an encrypted connection to the parser, read in memory, and deleted immediately; they are not stored or logged. Do not upload data you are not allowed to share.</div>
 </footer>
 
 <script>
+// Deterrents: block right-click and common view-source / save / inspect shortcuts.
+// These stop casual copying only; a browser can always show its own page source.
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+  const k = (e.key || '').toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
+  if (e.key === 'F12' || (ctrl && ['u', 's', 'p'].includes(k)) || (ctrl && e.shiftKey && ['i', 'j', 'c'].includes(k))) {
+    e.preventDefault(); e.stopPropagation();
+  }
+}, true);
 (() => {
   // Address of your parser service (see backend/ folder). Set this after you deploy it.
   const API_URL = 'https://insightdeck-6aeh.onrender.com/api/parse';
